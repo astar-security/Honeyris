@@ -28,5 +28,5 @@ The most effective way to cover your network is to put a honeyris instance in ev
 If the attacker stay on the machine he powned and does not try lateral movement, you will not be able to catch it.  
 So, to be effective, this tool should be combined with the baselines of the information security monitoring:
 * Multiple failed login attempts against corporate account(s)
-* Every hit on a "DENY" rule of the firewall
+* Every hit on a "DENY" rule of the firewall from the internal network
 * Every alert of the Antivirus endpoint agent

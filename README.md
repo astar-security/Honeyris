@@ -1,13 +1,13 @@
 # Honeyris
-A cost effective way to detect intrusion in your network
+A cost effective way to detect intrusion in your network in the form of a "Honeypot as a SIEM" (HaaS)
 
 ## Purpose
 Because every company connot buy a AAA SIEM with scalability, log parsing, false positive management, AI, etc. Honeyris offers an alternative way to spot an "in progress intrusion" in your network.  
 
-The main principe is to provide a honey pot which has no reason to be reached by a trusted asset. So, if this honeypot receives packets (except broadcast ones), you can assume that either there is a misconfigured asset in your network (and you should investigate its behaviour) or there is an attacker who try to perform lateral movement (so at least one asset is probably already compromised but you still have the time to stop its spread)
+The main principe is to provide a honeypot which has no reason to be reached by a trusted asset. So, if this honeypot receives packets (except broadcast ones), you can assume that either there is a misconfigured asset in your network (and you should investigate its behaviour to avoid useless traffic) or there is an attacker who try to perform lateral movement (so at least one asset is probably already compromised but you still have the time to stop its spread)
 
 ## Mechanics
-The **Honeyris honeypot** is configured to simulate a reachable service on the 65 536 TCP and UDP ports and to answer to every ICMP/ARP request.  
+The **Honeyris** honeypot is configured to simulate a reachable service on the 65 536 TCP and UDP ports and to answer to every ICMP/ARP request.  
 This way, you can spot :
 - nmap scanning
 - nbtscan scanning

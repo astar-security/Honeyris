@@ -13,6 +13,9 @@ import argparse
 import signal
 from datetime import datetime
 
+ips, gws, macs, nss, whitelist, blacklist = None, None, None, None, None, None
+log, logfile = None, None
+
 # Get the local IPv4 addresses which will be whitelisted
 def getHoneyIPAddresses():
     try:
@@ -63,23 +66,36 @@ def getHoneyDNS():
 # As the honeyris server will join targets to update, they must be whitelisted
 #def getHoneyUpdater():
 
-ips = getHoneyIPAddresses()
-gws,macs = getHoneyGateway()
-nss = getHoneyDNS()
-whitelist = ips.union(gws.union(nss))
-blacklist = set()
-logfilename = f"{datetime.today().isoformat()}_honey.logs"
-logfile = open(logfilename, "w")
-logfile.write(f"Trusted information:\nHoneyris IP address: {ips}\nHoneyris gw address and macs: {gws} {macs}\nHoneyris NS address: {nss}\n\nHits:\n")
-log = {}
+def populate():
+    global ips
+    global gws
+    global macs
+    global nss
+    global whitelist
+    global blacklist
+
+    ips = getHoneyIPAddresses()
+    gws,macs = getHoneyGateway()
+    nss = getHoneyDNS()
+    whitelist = ips.union(gws.union(nss))
+    blacklist = set()
+
+def setLog():
+    global logfile
+    global log
+    logfilename = f"{datetime.today().isoformat()}_honey.logs"
+    logfile = open(logfilename, "w")
+    logfile.write(f"Trusted information:\nHoneyris IP address: {ips}\nHoneyris gw address and macs: {gws} {macs}\nHoneyris NS address: {nss}\n\nHits:\n")
+    log = {}
 
 def logMeThat(ip, date, attack, packet):
     global log
+    global logfile
     if ip not in log:
         log[ip] = {}
     log[ip][date] = {attack:str(packet)}
     print(f"[+] {date}: {ip} wants some honey from us through {attack}")
-    logfile.write(f"{date} : {ip} : {attack} : {str(packet)}") 
+    logfile.write(f"Hit : {date} : {ip} : {attack} : {str(packet)}") 
 
 def ctrlCHandler(signum, frame):
     global logfile
@@ -138,6 +154,8 @@ def main():
     parser.add_argument('--arpspoof', action="store_true", dest="ARPSpoof", default=False,
             help='Enable ARP spoof blacklist')   
     args = parser.parse_args()
+    populate()
+    setLog()
     blacklistIP(args.IP, args.ARPPing, args.ARPSpoof)
 
 

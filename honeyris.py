@@ -7,68 +7,73 @@
 # Author: David Soria (@Sibwara)                                       #
 ########################################################################
 
-import subprocess
 import pyshark
 import argparse
+import logging
+import logging.handlers
 import signal
-import socket
-from datetime import datetime
 from scapy.all import *
 
-ips, gws, macs, nss, dhcp = set(), set(), set(), set(), set()
-whitelist, blacklist = None, None
-log = [None, None, None]
+blacklist = None
+log = None
 
 ##################
 # Whitelist part #
 ##################
 
 # Get the local IPv4 addresses which will be whitelisted
-def getHoneyIPAddresses(iface, ips):
+def getHoneyIPAddresses(iface):
+    global log
+    ips = set()
     try:
         ips.add("127.0.0.1")
         ips.add(get_if_addr(iface))
-        print(f"[*] IP addresses of {iface} are : {ips}")
-        return 0
+        return ips
     except Exception as e:
-        print(f"[!] ERROR : {e}")
-        return 1
+        log.error(f"Error during local IP collection: {e}")
+        return ips
 
 # Get the local GW which will be whitelisted
-def getHoneyGateway(iface, gws, macs):
+def getHoneyGateway(iface):
+    global log
+    gws, macs = set(), set()
     try:
         # get default gw for chosen iface
         res = conf.route.route()
         if res[0] == iface :
             gws.add(res[2])
-        print(f"[*] Default gateway of {iface} is : {gws}")
         # get associated known MAC address
-        res = subprocess.run(["ip", "neigh", "show"], capture_output=True)
+        arp = open("/proc/net/arp","r")
+        table = arp.read()
         for gw in gws :
-            mac = str(res.stdout).split(gw)[1].split("lladdr ")[1].split(" ")[0]
+            mac = table.split(gw)[1].split("\n")[0].split()[2]
             macs.add(mac)
-        print(f"[*] known MAC address of the default gateway is : {macs}")
-        return 0
+        return gws, macs
     except Exception as e:
-        print(f"[!] ERROR : {e}")
-        return 1
+        log.error(f"Error during gateway collection: {e}")
+        return gws, macs
 
 # As the DNS will be involved for the system update, it must be whitelisted
-def getHoneyDNS(nss):
+def getHoneyDNS():
+    global log
+    nss = set()
     try:
-        # Parsing the output of the "cat /etc/resolv.conf" command
-        res = subprocess.run(["cat", "/etc/resolv.conf"], capture_output=True)
-        for ns in str(res.stdout).split("nameserver ")[1:]:
-            nss.add(ns.split("\\n")[0])
-        print(f"[*] DNS servers of the host are : {nss}")
-        return 0
+        # Parsing the content of "/etc/resolv.conf" 
+        resol = open("/etc/resolv.conf", "r")
+        dns = resol.read().split("nameserver ")[1:]
+        resol.close()
+        for ns in dns:
+            nss.add(ns.split("\n")[0])
+        return nss
     except Exception as e:
-        print(f"[!] ERROR : {e}")
-        return 1
+        log.error(f"Error during DNS collection: {e}")
+        return nss
 
 
 # As the DHCP server will be joined to update leases, it must be whitelisted
-def getHoneyDHCP(iface, dhcp):
+def getHoneyDHCP(iface):
+    global log
+    dhcp = set()
     try:
         conf.checkIPaddr=False
         localmac = get_if_hwaddr(iface)
@@ -80,11 +85,10 @@ def getHoneyDHCP(iface, dhcp):
             DHCP(options=[('message-type', 'discover'), 'end']))
         dhcp_offer = srp1(dhcp_discover,iface=iface, verbose=0, timeout=10)
         dhcp.add(dhcp_offer['IP'].src)
-        print(f"[*] DHCP server is {dhcp}")
-        return 0
+        return dhcp
     except Exception as e:
-        print(f"[!] ERROR : {e}")
-        return 1
+        log.error(f"Error during DHCP collection: {e}")
+        return dhcp
 
 """
 # As the honeyris server will join targets to update, they must be whitelisted
@@ -99,65 +103,57 @@ def getHoneyUpdater():
 ####################
 
 def populate(iface):
-    global ips
-    global gws
-    global macs
-    global nss
-    global dhcp
-    global whitelist
+    global log
     global blacklist
-#    global repositories
 
-    getHoneyIPAddresses(iface, ips)
-    getHoneyGateway(iface, gws, macs)
-    getHoneyDNS(nss)
-    getHoneyDHCP(iface, dhcp)
+    ips = getHoneyIPAddresses(iface)
+    gws, macs = getHoneyGateway(iface)
+    nss = getHoneyDNS()
+    dhcp = getHoneyDHCP(iface)
     whitelist = ips.union(gws.union(nss.union(dhcp)))
     blacklist = set()
+    
+    # provide information about honeyris
+    info = "Information about Honeyris-"\
+        f"Interface:{iface}-IP:{ips}-Gateway:{gws}{macs}-NS:{nss}-DHCP:{dhcp}"
+    log.info(info)
+    return ips,gws,macs,nss,dhcp,whitelist
+
 
 def setLog(siem):
     global log
-    global ips
-    global gws
-    global macs
-    global nss
-    global dhcp
     
+    port =  514
     
-    log[1] = siem
-    log[2] =  514
-    
+    log = logging.getLogger('Honeyris')
+    log.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(name)s--%(levelname)s--%(asctime)s--%(message)s')
+    console = logging.StreamHandler()
+    console.setFormatter(formatter)
+    log.addHandler(console)
+
     try:
         # check if a specific port is provided
         dest = siem.split(":")
         if len(dest) == 2:
-            log[1] = dest[0]
-            log[2] = int(dest[1])
+            siem = dest[0]
+            port = int(dest[1])
         # set UDP socket
-        log[0] = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # provide information about honeyris
-        info = f"INFO-Trusted information-Honeyris IP address:{ips}-Honeyris GW address/MAC:{gws}{macs}-Honeyris NS address:{nss}-Honeyris DHCP:{dhcp}"
-        log[0].sendto(bytes(info,"utf-8"), (log[1],log[2]))
-        print(f"[*] Logging initiated")
+        syslog = logging.handlers.SysLogHandler(address=(siem, port))
+        syslog.setFormatter(formatter)
+        log.addHandler(syslog)
+
+        log.info("Logging ready")
         return 0
     except Exception as e:
-        print(f"[!] ERROR : {e}")
+        log.error(f"Error during logging initialization: {e}")
         return 1
-
-def logMeThat(ip, date, attack, packet, verbose):
-    global log
-    print(f"[+] {date}: {ip} wants some honey from us through {attack}")
-    warn = f"WARNING-{date}-{ip}-{attack}"
-    if verbose:
-        warn += f"-{str(packet)}"
-    log[0].sendto(bytes(warn,"utf-8"),(log[1],log[2])) 
 
 def ctrlCHandler(signum, frame):
     global log
     global blacklist
-    print(f"[!] quitting...")
-    log[0].close()
-    print(f"Blacklist: {blacklist}")
+    log.info(f"quitting...")
+    log.info(f"Blacklisted targets were: {blacklist}")
 
 signal.signal(signal.SIGINT, ctrlCHandler)
 
@@ -165,15 +161,11 @@ signal.signal(signal.SIGINT, ctrlCHandler)
 # Serve some honey #
 ####################
 
-def blacklistIP(iface, IP, ARPPing, ARPSpoof, verbose):
-    global gws
-    global ips
-    global macs
-    global nss
-    global dhcp
-    global whitelist
+def blacklistIP(iface, IP, ARPPing, ARPSpoof, verbose, whitelist, ips, gws, macs):
     global blacklist
+    global log
 
+    log.info("Logging initiated")
     try:
         capture = pyshark.LiveCapture(interface=iface)
         for packet in capture.sniff_continuously():
@@ -182,29 +174,26 @@ def blacklistIP(iface, IP, ARPPing, ARPSpoof, verbose):
             if (IP and 'IP' in packet and packet['ip'].dst in ips and 
                     packet['ip'].src not in whitelist):
                 blacklist.add(packet['ip'].src)
-                logMeThat(packet['ip'].src, datetime.today().isoformat(), 
-                        "IP request", packet, verbose)
+                log.warning(f"{packet['ip'].src}--IP request" + ['', f"--{packet}"][verbose])
             
             # if a ARP request does not come from a trusted IP   
             elif (ARPPing and 'ARP' in packet and packet['arp'].opcode == '1'  
             and packet['arp'].dst_proto_ipv4 in ips 
             and packet['arp'].src_proto_ipv4 not in whitelist):
                 blacklist.add(packet['arp'].src_proto_ipv4)
-                logMeThat(packet['arp'].src_proto_ipv4, datetime.today().isoformat(), 
-                        "ARP ping", packet, verbose)
+                log.warning(f"{packet['arp'].src_proto_ipv4}--ARP ping" + ['', f"--{packet}"][verbose])
 
             # if a ARP reply of the gateway does not come from a trusted MAC   
             elif (ARPSpoof and 'ARP' in packet and packet['arp'].opcode == '2'  
             and packet['arp'].src_hw_mac not in macs 
             and packet['arp'].src_proto_ipv4 in gws):
                 blacklist.add(packet['arp'].src_proto_ipv4)
-                logMeThat(packet['arp'].src_hw_mac, datetime.today().isoformat(), 
-                        "ARP spoof", packet, verbose)
+                log.warning(f"{packet['arp'].src_hw_mac}--ARP spoof" + ['', f"--{packet}"][verbose])
     except Exception as e:
-        print(f"[!] {e} occurs")
+        log.error(f"Error during packet capture: {e}")
 
 
-def main():
+def main():    
     parser = argparse.ArgumentParser(description='Detect suspucious activity from '\
             'the network', add_help=True)
     parser.add_argument('--ip', action="store_true", dest="IP", default=False,
@@ -214,15 +203,16 @@ def main():
     parser.add_argument('--arpspoof', action="store_true", dest="ARPSpoof", default=False,
             help='Enable ARP spoof blacklist')   
     parser.add_argument('--verbose', action="store_true", dest="verbose", default=False,
-            help="Include packet received from suspicious IP, WARNING : can contain sensitive data")
+            help="Include packet content received from suspicious IP, WARNING : sensitive data could be transmitted through UDP syslog (cleartext)")
     parser.add_argument('iface', 
             help="the network interface to monitor")
     parser.add_argument('siem', 
             help="the server to send the UDP syslog alerts, can be 127.0.0.1:514")
     args = parser.parse_args()
-    populate(args.iface)
+    
     setLog(args.siem)
-    blacklistIP(args.iface, args.IP, args.ARPPing, args.ARPSpoof, args.verbose)
+    ips, gws, macs, nss, dhcp, whitelist = populate(args.iface)
+    blacklistIP(args.iface, args.IP, args.ARPPing, args.ARPSpoof, args.verbose, whitelist, ips, gws, macs)
 
 if __name__ == '__main__':
     main()

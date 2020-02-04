@@ -42,7 +42,7 @@ def getHoneyGateway(iface):
         res = conf.route.route()
         if res[0] == iface :
             gws.add(res[2])
-        # get associated known MAC address
+        # get the associated known MAC address
         arp = open("/proc/net/arp","r")
         table = arp.read()
         for gw in gws :
@@ -75,6 +75,7 @@ def getHoneyDHCP(iface):
     global log
     dhcp = set()
     try:
+        # make a DHCP discover request to identify the DHCP server
         conf.checkIPaddr=False
         localmac = get_if_hwaddr(iface)
         localmacraw = get_if_raw_hwaddr(iface)[1]
@@ -90,14 +91,10 @@ def getHoneyDHCP(iface):
         log.error(f"Error during DHCP collection: {e}")
         return dhcp
 
-"""
+
 # As the honeyris server will join targets to update, they must be whitelisted
-def getHoneyUpdater():
-    global repositories
-    f = open(repositories, "r")
-    rep = f.read().split('\n')
-    f.close()
-"""
+#def getHoneyUpdater():
+
 ####################
 # Prepare the meal #
 ####################
@@ -106,10 +103,13 @@ def populate(iface):
     global log
     global blacklist
 
+    # call whitelist functions
     ips = getHoneyIPAddresses(iface)
     gws, macs = getHoneyGateway(iface)
     nss = getHoneyDNS()
     dhcp = getHoneyDHCP(iface)
+
+    # aggregate and set the blacklist
     whitelist = ips.union(gws.union(nss.union(dhcp)))
     blacklist = set()
     
@@ -117,14 +117,17 @@ def populate(iface):
     info = "Information about Honeyris-"\
         f"Interface:{iface}-IP:{ips}-Gateway:{gws}{macs}-NS:{nss}-DHCP:{dhcp}"
     log.info(info)
+
     return ips,gws,macs,nss,dhcp,whitelist
 
 
 def setLog(siem):
     global log
     
+    # default Syslog port
     port =  514
-    
+
+    # Set the command line logger
     log = logging.getLogger('Honeyris')
     log.setLevel(logging.INFO)
     formatter = logging.Formatter('%(name)s--%(levelname)s--%(asctime)s--%(message)s')
@@ -134,27 +137,27 @@ def setLog(siem):
 
     try:
         # check if a specific port is provided
-        dest = siem.split(":")
-        if len(dest) == 2:
-            siem = dest[0]
-            port = int(dest[1])
-        # set UDP socket
+        if ":" in siem:
+            siem, port = siem.split(":")
+            port = int(port)
+        # set Syslog handler
         syslog = logging.handlers.SysLogHandler(address=(siem, port))
         syslog.setFormatter(formatter)
         log.addHandler(syslog)
-
         log.info("Logging ready")
         return 0
     except Exception as e:
         log.error(f"Error during logging initialization: {e}")
         return 1
 
+# Clean exit after CTRL-C
 def ctrlCHandler(signum, frame):
     global log
     global blacklist
     log.info(f"quitting...")
     log.info(f"Blacklisted targets were: {blacklist}")
 
+# send CTRL-C signal to ctrlCHandler
 signal.signal(signal.SIGINT, ctrlCHandler)
 
 ####################
@@ -166,10 +169,9 @@ def blacklistIP(iface, IP, ARPPing, ARPSpoof, verbose, whitelist, ips, gws, macs
     global log
 
     log.info("Logging initiated")
-    try:
-        capture = pyshark.LiveCapture(interface=iface)
-        for packet in capture.sniff_continuously():
-        
+    capture = pyshark.LiveCapture(interface=iface)
+    for packet in capture.sniff_continuously():
+        try:
             # if an IP request does not come from a trusted IP
             if (IP and 'IP' in packet and packet['ip'].dst in ips and 
                     packet['ip'].src not in whitelist):
@@ -189,8 +191,10 @@ def blacklistIP(iface, IP, ARPPing, ARPSpoof, verbose, whitelist, ips, gws, macs
             and packet['arp'].src_proto_ipv4 in gws):
                 blacklist.add(packet['arp'].src_proto_ipv4)
                 log.warning(f"{packet['arp'].src_hw_mac}--ARP spoof" + ['', f"--{packet}"][verbose])
-    except Exception as e:
-        log.error(f"Error during packet capture: {e}")
+        
+        except Exception as e:
+            log.error(f"Error during packet capture: {e}")
+            continue
 
 
 def main():    

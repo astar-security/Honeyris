@@ -20,9 +20,11 @@ This way, you can spot :
 ## Usage
 The basic command line is :  
 ```
-python3 honeyris.py --ip --arpping --arpspoof --verbose eth0 127.0.0.1:514
+python3 honeyris.py --ip --arpping --arpspoof eth0 127.0.0.1:514
 ```
 You should disable --arpspoof if your gateway is a virtual IP which can commonly change its MAC address.  
+
+The `--verbose` option will log the packet content which trigger the alert.
 
 ## Blindspot & limitation
 This approach can work only if you do not have too much assets which perform some kind of scanning of your network (or you can whitelist their IP addresses).  

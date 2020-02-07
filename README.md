@@ -17,7 +17,13 @@ This way, you can spot :
 - distributed eternalblue
 - ...
 
+## Dependencies
+ - scapy
+ - pyshark
+
 ## Usage
+The tool must be launched as root (because of pyshark).  
+
 The basic command line is :  
 ```
 python3 honeyris.py --ip --arpping --arpspoof eth0 127.0.0.1:514

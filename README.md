@@ -17,11 +17,17 @@ This way, you can spot :
 - distributed eternalblue
 - ...
 
+## Usage
+The basic command line is :  
+```
+python3 honeyris.py --ip --arpping --arpspoof --verbose eth0 127.0.0.1:514
+```
+You should disable --arpspoof if your gateway is a virtual IP which can commonly change its MAC address.  
 
 ## Blindspot & limitation
 This approach can work only if you do not have too much assets which perform some kind of scanning of your network (or you can whitelist their IP addresses).  
 
-Also, you need to have your own way to manage the alert raised by Honeyris to be able to stop the attacker as soon as possible. By default, Honeyris provide raw SMTP alert and SYSLOG alert.  
+Also, you need to have your own way to manage the alert raised by Honeyris to be able to stop the attacker as soon as possible. By default, Honeyris provide UDP SYSLOG alert.  
 
 The most effective way to cover your network is to put a honeyris instance in every subnet. Maybe it will be easier to deploy if switches integrate this kind of apporach.  
 

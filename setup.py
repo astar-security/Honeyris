@@ -17,7 +17,7 @@ DESCRIPTION = (
     'in the form of a "Honeypot as a SIEM" (HaaS)'
 )
 AUTHOR = 'David Soria (@Sibwara)'
-EMAIL = ''
+EMAIL = 'dsoria@astar.org'
 URL = 'https://github.com/astar-security/Honeyris'
 MODULES = [
     'honeyris'

@@ -1,3 +1,5 @@
+/!\ I discontinued the development of this project as a friend of me took the same idea to developp its own tool [Trapster](https://github.com/0xBallpoint/trapster-community) with a community edition. So his version will be better than mine quite quickly /!\
+
 # Honeyris
 A cost effective way to detect intrusion in your network in the form of a "Honeypot as a SIEM" (HaaS)
 
